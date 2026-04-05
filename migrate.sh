@@ -440,43 +440,73 @@ echo "--- 9. Cron ---"
 
 CRON_SCRIPT="$HOME/claude-healthcheck.sh"
 dry "create cron script" || {
+    # Generate cron script that sends tasks to the running tmux session
+    # (not a separate claude process — tmux session already has Telegram channel)
     cat > "$CRON_SCRIPT" << 'CEOF'
 #!/bin/bash
 # Claude Code health check runner
-# Edit the prompts below to match your infrastructure.
-# Each case runs claude -p with a task prompt.
+# Sends tasks to the running Claude tmux session.
+# The session has Telegram connected, so Claude can notify the user.
+#
+# Usage:
+#   ./claude-healthcheck.sh "Check if nginx is running on myserver"
+#   ./claude-healthcheck.sh my_task_name
+#
+# Edit the case block below to add named tasks.
 
-CLAUDE="$(which claude 2>/dev/null || echo /usr/local/bin/claude)"
+SESSION="claude-tg"
 LOG="/var/log/claude-healthcheck.log"
 
-run() {
-    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $1" >> "$LOG"
-    timeout 120 "$CLAUDE" -p "$1" --permission-mode dontAsk >> "$LOG" 2>&1 || true
+send_task() {
+    local task="$1"
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Sending: ${task:0:80}..." >> "$LOG"
+
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ERROR: tmux session $SESSION not running" >> "$LOG"
+        # Try to restart the service
+        systemctl restart claude-telegram 2>/dev/null
+        sleep 15
+        if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ERROR: restart failed" >> "$LOG"
+            return 1
+        fi
+    fi
+
+    tmux send-keys -t "$SESSION" "$task" Enter
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Sent OK" >> "$LOG"
 }
 
 case "${1:-help}" in
-    # Add your own checks here. Examples:
-    # health)  run "SSH to myserver, check nginx is running. Alert via Telegram if down." ;;
-    # payment) run "Check if payment is due soon (see memory). Remind via Telegram." ;;
-    # backup)  run "SSH to myserver, check last backup age. Alert if older than 24h." ;;
+    # ── Add your named tasks here ──
+    # example)
+    #     send_task "SSH to myserver, check nginx. Alert Telegram user 12345 if down."
+    #     ;;
     help)
-        echo "Usage: $0 <task>"
-        echo "Edit this script to add your health check tasks."
+        echo "Usage: $0 <task_name|\"free text prompt\">"
+        echo "Edit this script to add named tasks, or pass a prompt directly."
         ;;
     *)
-        run "$1"
+        # If argument doesn't match a case, treat it as a direct prompt
+        send_task "$1"
         ;;
 esac
 CEOF
     chmod +x "$CRON_SCRIPT"
-    ok "Cron script: $CRON_SCRIPT (edit to add your checks)"
-}
 
-# If HEARTBEAT.md has content, remind user to set up cron
-[ -f "$WORKSPACE/HEARTBEAT.md" ] && {
-    info "Found HEARTBEAT.md — review it and add cron entries:"
-    echo "    crontab -e"
-    echo "    # Example: */30 * * * * $CRON_SCRIPT health"
+    # Auto-generate task stubs from HEARTBEAT.md if it exists
+    if [ -f "$WORKSPACE/HEARTBEAT.md" ]; then
+        info "Found HEARTBEAT.md — parsed into cron script comments"
+        # Append HEARTBEAT contents as comments for reference
+        {
+            echo ""
+            echo "# ── Tasks from OpenClaw HEARTBEAT.md (review and uncomment) ──"
+            sed 's/^/# /' "$WORKSPACE/HEARTBEAT.md"
+        } >> "$CRON_SCRIPT"
+    fi
+
+    ok "Cron script: $CRON_SCRIPT"
+    info "Edit it to add your tasks, then: crontab -e"
+    echo "    # Example: */30 * * * * $CRON_SCRIPT \"Check server health\""
 }
 
 # ============================================================================
