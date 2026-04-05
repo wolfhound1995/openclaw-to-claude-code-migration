@@ -1,6 +1,6 @@
 # openclaw-to-claude
 
-Migrate from [OpenClaw](https://openclaw.dev) to [Claude Code](https://claude.ai/code) in one command.
+Migrate from [OpenClaw](https://openclaw.io) to [Claude Code](https://claude.ai/code) in one command.
 
 ## What it does
 
