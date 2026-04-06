@@ -25,7 +25,7 @@ The script also:
 
 ```bash
 git clone https://github.com/wolfhound1995/openclaw-to-claude-code-migration
-cd openclaw-to-claude
+cd openclaw-to-claude-code-migration
 chmod +x migrate.sh
 ./migrate.sh
 ```
