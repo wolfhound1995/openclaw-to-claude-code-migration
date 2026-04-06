@@ -383,21 +383,37 @@ echo "--- 8. Service ---"
 CLAUDE_BIN="$(which claude)"
 
 dry "create systemd service" || {
-    # Wrapper: tmux + expect (Claude needs TTY; expect auto-accepts bypass warning)
+    # Wrapper: tmux + expect (Claude needs TTY; expect auto-accepts startup prompts)
     cat > "$WRAPPER_PATH" << 'WEOF'
 #!/bin/bash
 SESSION="claude-tg"
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 sleep 1
-exec tmux new-session -d -s "$SESSION" "expect -c '
-set timeout 60
+
+cat > /tmp/claude-tg-start.sh << 'EXPECT'
+#!/usr/bin/env expect
+set timeout 120
 spawn env IS_SANDBOX=1 claude --channels plugin:telegram@claude-plugins-official --dangerously-skip-permissions
-sleep 5
-send -- \"\x1b\[B\"
+
+# Prompt 1: "trust this folder" — option 1 already selected, press Enter
+sleep 6
+send "\r"
+
+# Prompt 2: "bypass permissions warning" — Down to "Yes, I accept", Enter
+sleep 4
+send "\033\[B"
 sleep 1
-send \"\r\"
+send "\r"
+
+# Any extra prompts — Enter
+sleep 3
+send "\r"
+
 interact
-'"
+EXPECT
+chmod +x /tmp/claude-tg-start.sh
+
+exec tmux new-session -d -s "$SESSION" /tmp/claude-tg-start.sh
 WEOF
     chmod +x "$WRAPPER_PATH"
 
