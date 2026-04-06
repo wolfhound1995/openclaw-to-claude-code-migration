@@ -24,7 +24,7 @@ The script also:
 ## Quick start
 
 ```bash
-git clone [https://github.com/YOUR_USER/openclaw-to-claude.git](https://github.com/wolfhound1995/openclaw-to-claude-code-migration)
+git clone https://github.com/wolfhound1995/openclaw-to-claude-code-migration
 cd openclaw-to-claude
 chmod +x migrate.sh
 ./migrate.sh
